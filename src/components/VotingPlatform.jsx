@@ -803,41 +803,73 @@ const VotingPlatform = () => {
       }
     }
 
-    // Extraire le lieu (At) - aussi chercher "city" ou "ville"
-    // Chercher "At:" ou "A At:" suivi du lieu
-    const atPattern = /(?:A\s+)?At:\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i;
+    // Extraire le lieu (At) - chercher "At:" ou "A At:" suivi du lieu
+    // Patterns multiples pour mieux capturer
+    const atPatterns = [
+      /(?:A\s+)?At:\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i,
+      /At\s*:\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i,
+      /(?:A\s+)?At\s+([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i
+    ];
 
-    const atMatch = text.match(atPattern);
+    for (const pattern of atPatterns) {
+      const atMatch = text.match(pattern);
+      if (atMatch && atMatch[1]) {
+        // Nettoyer le texte extrait
+        let extractedAt = atMatch[1].trim();
+        // Enlever les retours à la ligne et prendre seulement la première ligne
+        extractedAt = extractedAt.split('\n')[0].trim();
+        // Enlever les caractères indésirables à la fin (virgules, points, etc.)
+        extractedAt = extractedAt.replace(/[,;.\s]+$/, '').trim();
+        
+        if (extractedAt.length > 0 && extractedAt.length < 50) {
+          cardInfo.at = extractedAt;
+          console.log('Lieu (At) trouvé:', cardInfo.at);
+          break;
+        }
+      }
+    }
 
-    if (atMatch) {
+    // Si pas trouvé avec les patterns, chercher dans les lignes contenant "At"
+    if (!cardInfo.at) {
+      for (const line of lines) {
+        const lowerLine = line.toLowerCase();
+        if (lowerLine.includes('at') && !lowerLine.includes('date') && !lowerLine.includes('valid')) {
+          // Essayer d'extraire le texte après "at" ou "at:"
+          const afterAtMatch = line.match(/at\s*:?\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i);
+          if (afterAtMatch && afterAtMatch[1]) {
+            let extractedAt = afterAtMatch[1].trim().split(/[,\s]+/)[0];
+            if (extractedAt.length > 0 && extractedAt.length < 50) {
+              cardInfo.at = extractedAt;
+              console.log('Lieu (At) trouvé dans ligne:', cardInfo.at);
+              break;
+            }
+          }
+        }
+      }
+    }
 
-      cardInfo.at = atMatch[1].trim().split('\n')[0].trim().split(/[,\s]+/)[0]; // Prendre seulement le premier mot
-
-      // Vérifier si c'est Tanguiéta
-
+    // Vérifier si c'est Tanguiéta
+    if (cardInfo.at) {
       const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguietta'];
-
-      const atLower = cardInfo.at.toLowerCase();
-
-      cardInfo.isTanguieta = tanguietaVariations.some(variation => atLower.includes(variation) || atLower === variation);
-
+      const atLower = cardInfo.at.toLowerCase().trim();
+      cardInfo.isTanguieta = tanguietaVariations.some(variation => 
+        atLower.includes(variation) || 
+        atLower === variation ||
+        atLower.startsWith(variation) ||
+        atLower.endsWith(variation)
+      );
+      console.log('Vérification Tanguiéta:', cardInfo.at, '->', cardInfo.isTanguieta);
     }
 
     // Si pas trouvé avec "At:", chercher dans tout le texte des variations de Tanguiéta
     if (!cardInfo.at || !cardInfo.isTanguieta) {
-
       const tanguietaPattern = /\b(tanguieta|tanguiéta|tanguietta)\b/i;
-
       const tanguietaMatch = text.match(tanguietaPattern);
-
       if (tanguietaMatch) {
-
         cardInfo.at = tanguietaMatch[1];
-
         cardInfo.isTanguieta = true;
-
+        console.log('Tanguiéta trouvé dans tout le texte:', cardInfo.at);
       }
-
     }
 
     // Extraire la date de validité
@@ -959,36 +991,35 @@ const VotingPlatform = () => {
 
       }
 
-      // Vérifier que les champs requis sont présents
+      // Vérifier que les champs requis sont présents et afficher ce qui a été récupéré en cas d'erreur
+      const extractedInfo = {
+        nom: cardInfo.lastName || 'Non trouvé',
+        prénom: cardInfo.firstName || 'Non trouvé',
+        lieu: cardInfo.at || 'Non trouvé',
+        date: cardInfo.validUntil || cardInfo.validityDate || 'Non trouvée',
+        pays: cardInfo.country || 'Non trouvé',
+        matricule: cardInfo.studentId || 'Non trouvé'
+      };
 
       if (!cardInfo.lastName || !cardInfo.firstName) {
-
-        setVerificationError('Impossible d\'extraire le nom et/ou le prénom de la carte. Veuillez réessayer avec une photo plus claire.');
-
+        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
+        setVerificationError(`Impossible d'extraire le nom et/ou le prénom de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
         setVerifying(false);
-
         return;
-
       }
 
       if (!cardInfo.at) {
-
-        setVerificationError('Impossible d\'extraire le lieu (At) de la carte. Veuillez réessayer avec une photo plus claire.');
-
+        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
+        setVerificationError(`Impossible d'extraire le lieu (At) de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
         setVerifying(false);
-
         return;
-
       }
 
       if (!cardInfo.validUntil && !cardInfo.validityDate) {
-
-        setVerificationError('Impossible d\'extraire la date de validité de la carte. Veuillez réessayer avec une photo plus claire.');
-
+        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
+        setVerificationError(`Impossible d'extraire la date de validité de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
         setVerifying(false);
-
         return;
-
       }
 
       
@@ -1006,13 +1037,10 @@ const VotingPlatform = () => {
       
 
       if (!cardInfo.isTanguieta) {
-
-        setVerificationError('Cette élection est réservée aux étudiants de Tanguiéta. Lieu détecté: ' + (cardInfo.at || 'Non spécifié'));
-
+        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
+        setVerificationError(`Cette élection est réservée aux étudiants de Tanguiéta.\n\nLieu détecté: ${cardInfo.at || 'Non spécifié'}\n\n${infoText}`);
         setVerifying(false);
-
         return;
-
       }
 
       
@@ -1610,11 +1638,17 @@ const VotingPlatform = () => {
 
                       <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-1" />
 
-                      <div>
+                      <div className="flex-1">
 
-                        <p className="text-red-700 font-bold text-lg">Erreur de vérification</p>
+                        <p className="text-red-700 font-bold text-lg mb-2">Erreur de vérification</p>
 
-                        <p className="text-red-600 mt-2">{verificationError}</p>
+                        <div className="text-red-600 mt-2 whitespace-pre-line text-sm space-y-1">
+                          {verificationError.split('\n').map((line, index) => (
+                            <p key={index} className={line.startsWith('-') ? 'ml-4' : line.startsWith('Informations') ? 'font-semibold mt-2' : ''}>
+                              {line}
+                            </p>
+                          ))}
+                        </div>
 
                       </div>
 
