@@ -27,9 +27,7 @@ L'application sera accessible à l'adresse affichée (généralement `http://loc
 - Prendre ou importer une photo de carte étudiante
 - Cliquer sur "Vérifier"
 
-**Note importante :** La vérification utilise l'API Claude d'Anthropic. Vous devez :
-- Avoir une clé API Anthropic valide
-- Configurer la variable d'environnement `VITE_ANTHROPIC_API_KEY` (voir section Configuration)
+**Note importante :** La vérification utilise **Tesseract.js** (OCR gratuit et open source) qui fonctionne entièrement côté client. Aucune clé API n'est nécessaire !
 
 #### **Test du vote :**
 1. Après vérification réussie de la carte, vous arrivez sur l'écran de vote
@@ -51,28 +49,26 @@ L'application sera accessible à l'adresse affichée (généralement `http://loc
 
 ## ⚠️ Configuration requise
 
-### API Anthropic
+### Module de vérification photo (GRATUIT)
 
-Le module de vérification photo extrait automatiquement les informations suivantes de la carte étudiante :
+Le module de vérification photo utilise **Tesseract.js**, une bibliothèque OCR open source et **100% gratuite** qui fonctionne entièrement côté client. Aucune clé API n'est nécessaire !
+
+Le module extrait automatiquement les informations suivantes de la carte étudiante :
 - **Nom de famille** (lastName)
 - **Prénom** (firstName)
 - **Date de validité** (validityDate et validUntil)
 - **Lieu (At)** - lieu de naissance indiqué après "At:" ou "A At:"
 
-Pour que la vérification fonctionne, vous devez :
+**Avantages de Tesseract.js :**
+- ✅ **100% gratuit** - Aucun coût, aucune limite
+- ✅ **Fonctionne hors ligne** - Traitement côté client
+- ✅ **Respect de la vie privée** - Les images ne quittent jamais votre appareil
+- ✅ **Aucune configuration** - Fonctionne immédiatement après l'installation
 
-1. Obtenir une clé API sur [console.anthropic.com](https://console.anthropic.com)
-2. Créer un fichier `.env` à la racine du projet avec :
-```bash
-VITE_ANTHROPIC_API_KEY=votre_cle_api_ici
-```
-3. Redémarrer le serveur de développement après avoir ajouté la clé API
-
-**Important :** Ne commitez jamais votre fichier `.env` dans le dépôt Git. Il contient des informations sensibles.
-
-### Alternative pour tester sans API
-
-Pour tester sans l'API Anthropic, vous pouvez créer une fonction de mock qui retourne des données de test.
+**Conseils pour une meilleure extraction :**
+- Prenez une photo bien éclairée de la carte
+- Assurez-vous que la carte est bien cadrée et nette
+- Évitez les reflets et les ombres
 
 ## 📁 Structure du projet
 
@@ -99,8 +95,9 @@ etudiant/
 ## 📝 Notes importantes
 
 - Les votes sont stockés dans le **localStorage** du navigateur
-- La vérification de carte nécessite une **connexion Internet** et une **clé API Anthropic**
+- La vérification de carte utilise **Tesseract.js** (OCR gratuit) - **aucune connexion Internet requise** pour l'extraction
 - L'application est optimisée pour mobile et desktop
 - Le timer de vote est de **60 secondes** par défaut
+- Pour une meilleure précision, assurez-vous que la photo de la carte est claire et bien éclairée
 
 

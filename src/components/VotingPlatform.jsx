@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 
 import { Camera, CheckCircle, XCircle, Users, Clock, Award, AlertCircle, Shield, ShieldCheck, Edit2, Play, Calendar } from 'lucide-react';
 
+import { createWorker } from 'tesseract.js';
+
 const VotingPlatform = () => {
 
   const [stage, setStage] = useState('scan');
@@ -615,6 +617,194 @@ const VotingPlatform = () => {
 
   };
 
+  // Fonction pour parser le texte extrait et trouver les informations
+  const parseCardText = (text) => {
+
+    const cardInfo = {
+
+      isStudentCard: false,
+
+      lastName: '',
+
+      firstName: '',
+
+      validityDate: '',
+
+      validUntil: '',
+
+      at: '',
+
+      isValid: false,
+
+      studentId: '',
+
+      country: '',
+
+      isTanguieta: false
+
+    };
+
+    // Vérifier si c'est une carte étudiante (chercher des mots-clés)
+
+    const studentCardKeywords = ['carte', 'etudiant', 'student', 'matricule', 'validite', 'validity'];
+
+    const lowerText = text.toLowerCase();
+
+    const hasStudentCardKeyword = studentCardKeywords.some(keyword => lowerText.includes(keyword));
+
+    if (!hasStudentCardKeyword) {
+
+      return cardInfo;
+
+    }
+
+    cardInfo.isStudentCard = true;
+
+    // Extraire le nom et prénom
+    // Format typique: "MALICK" suivi de "Abdul-Rafick" ou similaire
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+    // Chercher dans les premières lignes (généralement où se trouve le nom)
+    for (let i = 0; i < Math.min(10, lines.length); i++) {
+
+      const line = lines[i];
+
+      // Pattern 1: Nom en majuscules suivi de prénom (ex: "MALICK Abdul-Rafick")
+      const pattern1 = /^([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]{2,})\s+([A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/;
+
+      const match1 = line.match(pattern1);
+
+      if (match1) {
+
+        cardInfo.lastName = match1[1].trim();
+
+        cardInfo.firstName = match1[2].trim();
+
+        break;
+
+      }
+
+      // Pattern 2: Ligne avec seulement des majuscules (nom de famille)
+      // La ligne suivante pourrait être le prénom
+      const allUpperCasePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß\s]{2,}$/;
+
+      if (allUpperCasePattern.test(line) && line.length > 2 && line.length < 30) {
+
+        // Vérifier si la ligne suivante contient un prénom
+
+        if (i + 1 < lines.length) {
+
+          const nextLine = lines[i + 1];
+
+          const firstNamePattern = /^[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+$/;
+
+          if (firstNamePattern.test(nextLine) && nextLine.length < 30) {
+
+            cardInfo.lastName = line.trim();
+
+            cardInfo.firstName = nextLine.trim();
+
+            break;
+
+          }
+
+        }
+
+      }
+
+    }
+
+    // Extraire le lieu (At)
+    // Chercher "At:" ou "A At:" suivi du lieu
+    const atPattern = /(?:A\s+)?At:\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i;
+
+    const atMatch = text.match(atPattern);
+
+    if (atMatch) {
+
+      cardInfo.at = atMatch[1].trim();
+
+      // Vérifier si c'est Tanguiéta
+
+      const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguieta', 'tanguietta'];
+
+      const atLower = cardInfo.at.toLowerCase();
+
+      cardInfo.isTanguieta = tanguietaVariations.some(variation => atLower.includes(variation));
+
+    }
+
+    // Extraire la date de validité
+    // Format: "02/11 2023 au 02/11/2028" ou "02/11/2028"
+    const datePattern = /(\d{2}\/\d{2}(?:\s+\d{4})?(?:\s+au\s+)?\d{2}\/\d{2}\/\d{4})/;
+
+    const dateMatch = text.match(datePattern);
+
+    if (dateMatch) {
+
+      cardInfo.validityDate = dateMatch[1].trim();
+
+      // Extraire la date de fin
+
+      const endDatePattern = /(\d{2}\/\d{2}\/\d{4})/g;
+
+      const dates = text.match(endDatePattern);
+
+      if (dates && dates.length > 0) {
+
+        // Prendre la dernière date trouvée (généralement la date de fin)
+
+        cardInfo.validUntil = dates[dates.length - 1];
+
+      }
+
+    }
+
+    // Extraire le matricule/ID étudiant
+    const matriculePattern = /(?:Matricule|ID|matricule)[:\s]*(\d+)/i;
+
+    const matriculeMatch = text.match(matriculePattern);
+
+    if (matriculeMatch) {
+
+      cardInfo.studentId = matriculeMatch[1].trim();
+
+    }
+
+    // Extraire le pays
+    const countryPattern = /(?:Pays|Country|pays)[:\s]*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s]+)/i;
+
+    const countryMatch = text.match(countryPattern);
+
+    if (countryMatch) {
+
+      cardInfo.country = countryMatch[1].trim().split('\n')[0].trim();
+
+    }
+
+    // Vérifier si la carte est valide
+    if (cardInfo.validUntil) {
+
+      const [day, month, year] = cardInfo.validUntil.split('/').map(Number);
+
+      const expiryDate = new Date(year, month - 1, day);
+
+      const currentDate = new Date();
+
+      cardInfo.isValid = expiryDate > currentDate;
+
+    } else {
+
+      // Si pas de date trouvée, considérer comme valide par défaut
+
+      cardInfo.isValid = true;
+
+    }
+
+    return cardInfo;
+
+  };
+
   const verifyCard = async () => {
 
     setVerifying(true);
@@ -635,175 +825,19 @@ const VotingPlatform = () => {
 
       }
 
-      const base64Data = capturedImage.split(',')[1];
+      // Utiliser Tesseract.js pour extraire le texte de l'image
 
-      if (!base64Data) {
+      const worker = await createWorker('fra+eng'); // Français et Anglais
 
-        setVerificationError('Erreur lors du traitement de l\'image.');
+      const { data: { text } } = await worker.recognize(capturedImage);
 
-        setVerifying(false);
+      await worker.terminate();
 
-        return;
+      console.log('Texte extrait par OCR:', text);
 
-      }
+      // Parser le texte pour extraire les informations
 
-      // Récupérer la clé API depuis les variables d'environnement ou utiliser une valeur par défaut
-
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
-
-      if (!apiKey) {
-
-        setVerificationError('Clé API non configurée. Veuillez configurer VITE_ANTHROPIC_API_KEY dans votre fichier .env');
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      // Date actuelle pour la validation
-
-      const currentDate = new Date();
-
-      const currentDateStr = currentDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-      
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-
-        method: 'POST',
-
-        headers: {
-
-          'Content-Type': 'application/json',
-
-          'x-api-key': apiKey,
-
-          'anthropic-version': '2023-06-01'
-
-        },
-
-        body: JSON.stringify({
-
-          model: 'claude-sonnet-4-20250514',
-
-          max_tokens: 2000,
-
-          messages: [{
-
-            role: 'user',
-
-            content: [
-
-              {
-
-                type: 'image',
-
-                source: {
-
-                  type: 'base64',
-
-                  media_type: 'image/jpeg',
-
-                  data: base64Data
-
-                }
-
-              },
-
-              {
-
-                type: 'text',
-
-                text: `Analyse cette carte étudiante et extrais PRÉCISÉMENT les informations suivantes au format JSON uniquement (sans texte supplémentaire, sans preamble, sans backticks markdown):
-
-{
-  "isStudentCard": true/false,
-  "lastName": "nom de famille (ex: MALICK)",
-  "firstName": "prénom (ex: Abdul-Rafick)",
-  "validityDate": "date de validité complète telle qu'elle apparaît sur la carte (ex: '02/11 2023 au 02/11/2028' ou '02/11/2028')",
-  "validUntil": "date d'expiration au format DD/MM/YYYY (extraire uniquement la date de fin)",
-  "at": "lieu de naissance ou localité indiqué après 'At:' ou 'A At:' (ex: Tanguiéta)",
-  "isValid": true/false (si la carte est valide après ${currentDateStr}),
-  "studentId": "numéro étudiant/matricule si visible",
-  "country": "pays d'origine si visible",
-  "isTanguieta": true/false (si le lieu 'at' est Tanguieta, Tanguiéta, ou toute variation similaire)
-}
-
-INSTRUCTIONS IMPORTANTES:
-- Si ce n'est pas une carte étudiante, mets "isStudentCard": false.
-- La date actuelle est ${currentDateStr}.
-- Pour "lastName": extrais uniquement le nom de famille (en majuscules généralement).
-- Pour "firstName": extrais uniquement le prénom.
-- Pour "at": cherche le texte qui suit "At:" ou "A At:" sur la carte - c'est le lieu de naissance.
-- Pour "validityDate": copie exactement la date de validité telle qu'elle apparaît (peut être au format "02/11 2023 au 02/11/2028").
-- Pour "validUntil": extrais uniquement la date de fin au format DD/MM/YYYY.
-- Recherche attentivement toute mention de "Tanguieta", "Tanguiéta" ou variations similaires dans le champ "at".
-- Sois très précis dans l'extraction, ne confonds pas les champs.`
-
-              }
-
-            ]
-
-          }]
-
-        })
-
-      });
-
-      if (!response.ok) {
-
-        const errorData = await response.json().catch(() => ({}));
-
-        console.error('Erreur API:', response.status, errorData);
-
-        setVerificationError(`Erreur API (${response.status}): ${errorData.error?.message || 'Vérifiez votre clé API et votre connexion.'}`);
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      const data = await response.json();
-
-      const textContent = data.content.find(item => item.type === 'text')?.text || '';
-
-      if (!textContent) {
-
-        setVerificationError('Aucune réponse de l\'API. Veuillez réessayer.');
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      // Nettoyer le JSON de la réponse
-
-      let cleanJson = textContent.replace(/```json|```/g, '').trim();
-
-      // Enlever les balises markdown si présentes
-
-      cleanJson = cleanJson.replace(/^```[\s\S]*?```$/g, '').trim();
-
-      // Extraire le JSON même s'il y a du texte avant/après
-
-      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
-
-      if (!jsonMatch) {
-
-        console.error('Réponse API non-JSON:', textContent);
-
-        setVerificationError('Format de réponse invalide. Réponse reçue: ' + textContent.substring(0, 100));
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      const cardInfo = JSON.parse(jsonMatch[0]);
+      const cardInfo = parseCardText(text);
 
       console.log('Informations extraites:', cardInfo);
 
@@ -941,17 +975,13 @@ INSTRUCTIONS IMPORTANTES:
 
       console.error('Erreur de vérification:', error);
 
-      if (error instanceof SyntaxError) {
+      if (error.message?.includes('worker') || error.message?.includes('tesseract')) {
 
-        setVerificationError('Erreur lors du parsing de la réponse. Veuillez réessayer avec une photo plus claire.');
-
-      } else if (error.message?.includes('API')) {
-
-        setVerificationError('Erreur de connexion à l\'API. Vérifiez votre connexion Internet et votre clé API.');
+        setVerificationError('Erreur lors de l\'extraction du texte. Veuillez réessayer avec une photo plus claire et bien éclairée.');
 
       } else {
 
-        setVerificationError('Erreur lors de la vérification: ' + error.message);
+        setVerificationError('Erreur lors de la vérification: ' + (error.message || 'Erreur inconnue'));
 
       }
 
