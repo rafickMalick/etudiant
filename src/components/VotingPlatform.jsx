@@ -625,7 +625,47 @@ const VotingPlatform = () => {
 
     try {
 
+      if (!capturedImage) {
+
+        setVerificationError('Aucune image capturée.');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
       const base64Data = capturedImage.split(',')[1];
+
+      if (!base64Data) {
+
+        setVerificationError('Erreur lors du traitement de l\'image.');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
+      // Récupérer la clé API depuis les variables d'environnement ou utiliser une valeur par défaut
+
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
+
+      if (!apiKey) {
+
+        setVerificationError('Clé API non configurée. Veuillez configurer VITE_ANTHROPIC_API_KEY dans votre fichier .env');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
+      // Date actuelle pour la validation
+
+      const currentDate = new Date();
+
+      const currentDateStr = currentDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
       
 
@@ -637,13 +677,17 @@ const VotingPlatform = () => {
 
           'Content-Type': 'application/json',
 
+          'x-api-key': apiKey,
+
+          'anthropic-version': '2023-06-01'
+
         },
 
         body: JSON.stringify({
 
           model: 'claude-sonnet-4-20250514',
 
-          max_tokens: 1000,
+          max_tokens: 2000,
 
           messages: [{
 
@@ -671,7 +715,31 @@ const VotingPlatform = () => {
 
                 type: 'text',
 
-                text: 'Analyse cette carte étudiante et extrais les informations suivantes au format JSON uniquement (sans texte supplémentaire, sans preamble, sans backticks markdown):\n{\n  "isStudentCard": true/false,\n  "name": "nom complet de l\'étudiant",\n  "country": "pays",\n  "city": "ville ou localité (recherche Tanguieta, Tanguiéta, ou toute variation)",\n  "validUntil": "date d\'expiration au format DD/MM/YYYY",\n  "isValid": true/false (si la carte est valide après le 11/11/2025),\n  "studentId": "numéro étudiant si visible",\n  "isTanguieta": true/false (si la ville/localité est Tanguieta ou Tanguiéta)\n}\n\nSi ce n\'est pas une carte étudiante, mets "isStudentCard": false.\nLa date actuelle est le 11/11/2025.\nRecherche attentivement toute mention de "Tanguieta", "Tanguiéta" ou variations similaires sur la carte.'
+                text: `Analyse cette carte étudiante et extrais PRÉCISÉMENT les informations suivantes au format JSON uniquement (sans texte supplémentaire, sans preamble, sans backticks markdown):
+
+{
+  "isStudentCard": true/false,
+  "lastName": "nom de famille (ex: MALICK)",
+  "firstName": "prénom (ex: Abdul-Rafick)",
+  "validityDate": "date de validité complète telle qu'elle apparaît sur la carte (ex: '02/11 2023 au 02/11/2028' ou '02/11/2028')",
+  "validUntil": "date d'expiration au format DD/MM/YYYY (extraire uniquement la date de fin)",
+  "at": "lieu de naissance ou localité indiqué après 'At:' ou 'A At:' (ex: Tanguiéta)",
+  "isValid": true/false (si la carte est valide après ${currentDateStr}),
+  "studentId": "numéro étudiant/matricule si visible",
+  "country": "pays d'origine si visible",
+  "isTanguieta": true/false (si le lieu 'at' est Tanguieta, Tanguiéta, ou toute variation similaire)
+}
+
+INSTRUCTIONS IMPORTANTES:
+- Si ce n'est pas une carte étudiante, mets "isStudentCard": false.
+- La date actuelle est ${currentDateStr}.
+- Pour "lastName": extrais uniquement le nom de famille (en majuscules généralement).
+- Pour "firstName": extrais uniquement le prénom.
+- Pour "at": cherche le texte qui suit "At:" ou "A At:" sur la carte - c'est le lieu de naissance.
+- Pour "validityDate": copie exactement la date de validité telle qu'elle apparaît (peut être au format "02/11 2023 au 02/11/2028").
+- Pour "validUntil": extrais uniquement la date de fin au format DD/MM/YYYY.
+- Recherche attentivement toute mention de "Tanguieta", "Tanguiéta" ou variations similaires dans le champ "at".
+- Sois très précis dans l'extraction, ne confonds pas les champs.`
 
               }
 
@@ -683,15 +751,61 @@ const VotingPlatform = () => {
 
       });
 
+      if (!response.ok) {
+
+        const errorData = await response.json().catch(() => ({}));
+
+        console.error('Erreur API:', response.status, errorData);
+
+        setVerificationError(`Erreur API (${response.status}): ${errorData.error?.message || 'Vérifiez votre clé API et votre connexion.'}`);
+
+        setVerifying(false);
+
+        return;
+
+      }
+
       const data = await response.json();
 
       const textContent = data.content.find(item => item.type === 'text')?.text || '';
 
-      
+      if (!textContent) {
 
-      const cleanJson = textContent.replace(/```json|```/g, '').trim();
+        setVerificationError('Aucune réponse de l\'API. Veuillez réessayer.');
 
-      const cardInfo = JSON.parse(cleanJson);
+        setVerifying(false);
+
+        return;
+
+      }
+
+      // Nettoyer le JSON de la réponse
+
+      let cleanJson = textContent.replace(/```json|```/g, '').trim();
+
+      // Enlever les balises markdown si présentes
+
+      cleanJson = cleanJson.replace(/^```[\s\S]*?```$/g, '').trim();
+
+      // Extraire le JSON même s'il y a du texte avant/après
+
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+
+        console.error('Réponse API non-JSON:', textContent);
+
+        setVerificationError('Format de réponse invalide. Réponse reçue: ' + textContent.substring(0, 100));
+
+        setVerifying(false);
+
+        return;
+
+      }
+
+      const cardInfo = JSON.parse(jsonMatch[0]);
+
+      console.log('Informations extraites:', cardInfo);
 
       
 
@@ -705,11 +819,43 @@ const VotingPlatform = () => {
 
       }
 
+      // Vérifier que les champs requis sont présents
+
+      if (!cardInfo.lastName || !cardInfo.firstName) {
+
+        setVerificationError('Impossible d\'extraire le nom et/ou le prénom de la carte. Veuillez réessayer avec une photo plus claire.');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
+      if (!cardInfo.at) {
+
+        setVerificationError('Impossible d\'extraire le lieu (At) de la carte. Veuillez réessayer avec une photo plus claire.');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
+      if (!cardInfo.validUntil && !cardInfo.validityDate) {
+
+        setVerificationError('Impossible d\'extraire la date de validité de la carte. Veuillez réessayer avec une photo plus claire.');
+
+        setVerifying(false);
+
+        return;
+
+      }
+
       
 
       if (!cardInfo.isValid) {
 
-        setVerificationError('Carte expirée. Date de validité: ' + cardInfo.validUntil);
+        setVerificationError('Carte expirée. Date de validité: ' + (cardInfo.validityDate || cardInfo.validUntil));
 
         setVerifying(false);
 
@@ -721,7 +867,7 @@ const VotingPlatform = () => {
 
       if (!cardInfo.isTanguieta) {
 
-        setVerificationError('Cette élection est réservée aux étudiants de Tanguiéta. Ville détectée: ' + (cardInfo.city || 'Non spécifiée'));
+        setVerificationError('Cette élection est réservée aux étudiants de Tanguiéta. Lieu détecté: ' + (cardInfo.at || 'Non spécifié'));
 
         setVerifying(false);
 
@@ -731,7 +877,9 @@ const VotingPlatform = () => {
 
       
 
-      const studentIdentifier = (cardInfo.name + '_' + cardInfo.country).toLowerCase().replace(/\s+/g, '_');
+      // Créer un identifiant unique pour l'étudiant
+
+      const studentIdentifier = (cardInfo.lastName + '_' + cardInfo.firstName + '_' + (cardInfo.studentId || '')).toLowerCase().replace(/\s+/g, '_');
 
       
 
@@ -767,7 +915,19 @@ const VotingPlatform = () => {
 
       
 
-      setCardData({ ...cardInfo, identifier: studentIdentifier });
+      // Stocker toutes les informations extraites
+
+      setCardData({ 
+
+        ...cardInfo, 
+
+        identifier: studentIdentifier,
+
+        name: `${cardInfo.firstName} ${cardInfo.lastName}`, // Nom complet pour l'affichage
+
+        city: cardInfo.at // Pour compatibilité avec l'affichage existant
+
+      });
 
       setVerifying(false);
 
@@ -781,7 +941,19 @@ const VotingPlatform = () => {
 
       console.error('Erreur de vérification:', error);
 
-      setVerificationError('Erreur lors de la vérification. Veuillez réessayer.');
+      if (error instanceof SyntaxError) {
+
+        setVerificationError('Erreur lors du parsing de la réponse. Veuillez réessayer avec une photo plus claire.');
+
+      } else if (error.message?.includes('API')) {
+
+        setVerificationError('Erreur de connexion à l\'API. Vérifiez votre connexion Internet et votre clé API.');
+
+      } else {
+
+        setVerificationError('Erreur lors de la vérification: ' + error.message);
+
+      }
 
       setVerifying(false);
 
@@ -1360,9 +1532,16 @@ const VotingPlatform = () => {
 
                 <h1 className="text-3xl font-bold text-gray-800">Votez maintenant</h1>
 
-                <p className="text-gray-600">Étudiant: {cardData?.name}</p>
+                <p className="text-gray-600">
+                  <span className="font-semibold">Nom:</span> {cardData?.lastName || ''} <span className="font-semibold">Prénom:</span> {cardData?.firstName || ''}
+                </p>
 
-                <p className="text-sm text-gray-500">{cardData?.city} • {cardData?.country} • Valide jusqu'au {cardData?.validUntil}</p>
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold">Lieu (At):</span> {cardData?.at || cardData?.city || 'Non spécifié'} 
+                  {cardData?.country && ` • ${cardData.country}`}
+                  {cardData?.validityDate && ` • Valide: ${cardData.validityDate}`}
+                  {!cardData?.validityDate && cardData?.validUntil && ` • Valide jusqu'au ${cardData.validUntil}`}
+                </p>
 
               </div>
 

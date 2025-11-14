@@ -29,7 +29,7 @@ L'application sera accessible à l'adresse affichée (généralement `http://loc
 
 **Note importante :** La vérification utilise l'API Claude d'Anthropic. Vous devez :
 - Avoir une clé API Anthropic valide
-- Configurer l'en-tête `x-api-key` dans la requête (actuellement manquant dans le code)
+- Configurer la variable d'environnement `VITE_ANTHROPIC_API_KEY` (voir section Configuration)
 
 #### **Test du vote :**
 1. Après vérification réussie de la carte, vous arrivez sur l'écran de vote
@@ -53,18 +53,22 @@ L'application sera accessible à l'adresse affichée (généralement `http://loc
 
 ### API Anthropic
 
-Le code actuel fait appel à l'API Claude mais **manque la clé API**. Pour que la vérification fonctionne, vous devez :
+Le module de vérification photo extrait automatiquement les informations suivantes de la carte étudiante :
+- **Nom de famille** (lastName)
+- **Prénom** (firstName)
+- **Date de validité** (validityDate et validUntil)
+- **Lieu (At)** - lieu de naissance indiqué après "At:" ou "A At:"
+
+Pour que la vérification fonctionne, vous devez :
 
 1. Obtenir une clé API sur [console.anthropic.com](https://console.anthropic.com)
-2. Ajouter l'en-tête d'authentification dans `verifyCard()` :
-
-```javascript
-headers: {
-  'Content-Type': 'application/json',
-  'x-api-key': 'VOTRE_CLE_API_ICI',
-  'anthropic-version': '2023-06-01'
-}
+2. Créer un fichier `.env` à la racine du projet avec :
+```bash
+VITE_ANTHROPIC_API_KEY=votre_cle_api_ici
 ```
+3. Redémarrer le serveur de développement après avoir ajouté la clé API
+
+**Important :** Ne commitez jamais votre fichier `.env` dans le dépôt Git. Il contient des informations sensibles.
 
 ### Alternative pour tester sans API
 
