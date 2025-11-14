@@ -661,16 +661,18 @@ const VotingPlatform = () => {
     cardInfo.isStudentCard = true;
 
     // Extraire le nom et prénom
-    // Format typique: "MALICK" suivi de "Abdul-Rafick" ou similaire
+    // Format typique: "MALICK Abdul-rafick" ou "MALICK" sur une ligne et "Abdul-rafick" sur la suivante
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-    // Chercher dans les premières lignes (généralement où se trouve le nom)
-    for (let i = 0; i < Math.min(10, lines.length); i++) {
+    // Chercher dans les premières lignes (généralement où se trouve le nom en haut)
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
 
       const line = lines[i];
 
-      // Pattern 1: Nom en majuscules suivi de prénom (ex: "MALICK Abdul-Rafick")
-      const pattern1 = /^([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]{2,})\s+([A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/;
+      // Pattern 1: Nom en majuscules suivi de prénom sur la même ligne (ex: "MALICK Abdul-rafick")
+      // Le nom peut être en majuscules complètes, le prénom commence par une majuscule puis minuscules (peut contenir des tirets)
+      // Pattern amélioré pour détecter "MALICK Abdul-rafick" avec tiret et minuscules après le tiret
+      const pattern1 = /^([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]{2,})\s+([A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*(?:\s+[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ-]+)*)/;
 
       const match1 = line.match(pattern1);
 
@@ -680,33 +682,92 @@ const VotingPlatform = () => {
 
         cardInfo.firstName = match1[2].trim();
 
+        console.log('Nom trouvé (pattern 1):', cardInfo.lastName, cardInfo.firstName);
+
         break;
 
       }
 
-      // Pattern 2: Ligne avec seulement des majuscules (nom de famille)
-      // La ligne suivante pourrait être le prénom
+      // Pattern 2: Ligne avec seulement des majuscules (nom de famille comme "MALICK")
+      // La ligne suivante pourrait être le prénom (comme "Abdul-rafick")
       const allUpperCasePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß\s]{2,}$/;
 
-      if (allUpperCasePattern.test(line) && line.length > 2 && line.length < 30) {
+      if (allUpperCasePattern.test(line) && line.length >= 2 && line.length < 50 && !line.includes(':')) {
 
         // Vérifier si la ligne suivante contient un prénom
-
         if (i + 1 < lines.length) {
 
-          const nextLine = lines[i + 1];
+          const nextLine = lines[i + 1].trim();
 
-          const firstNamePattern = /^[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+$/;
+          // Pattern pour prénom: commence par majuscule, puis minuscules, peut contenir des tirets suivis de minuscules
+          // Ex: "Abdul-rafick" ou "Jean-Pierre"
+          const firstNamePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*(?:\s+[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ-]+)*$/;
 
-          if (firstNamePattern.test(nextLine) && nextLine.length < 30) {
+          if (firstNamePattern.test(nextLine) && nextLine.length >= 2 && nextLine.length < 50 && !nextLine.includes(':')) {
 
             cardInfo.lastName = line.trim();
 
             cardInfo.firstName = nextLine.trim();
 
+            console.log('Nom trouvé (pattern 2):', cardInfo.lastName, cardInfo.firstName);
+
             break;
 
           }
+
+        }
+
+        // Aussi vérifier la ligne précédente au cas où l'ordre serait inversé
+        if (i > 0) {
+
+          const prevLine = lines[i - 1].trim();
+
+          const firstNamePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*(?:\s+[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ-]+)*$/;
+
+          if (firstNamePattern.test(prevLine) && prevLine.length >= 2 && prevLine.length < 50 && !prevLine.includes(':')) {
+
+            cardInfo.firstName = prevLine.trim();
+
+            cardInfo.lastName = line.trim();
+
+            console.log('Nom trouvé (pattern 2 inversé):', cardInfo.lastName, cardInfo.firstName);
+
+            break;
+
+          }
+
+        }
+
+      }
+
+      // Pattern 3: Chercher directement "MALICK" suivi de "Abdul-rafick" même avec des espaces/tirets
+      // Format: "MALICK" puis "Abdul-rafick" ou "Abdul-Rafick"
+      // Pattern amélioré pour mieux détecter les prénoms avec tirets et minuscules
+      const combinedPattern = /([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]{2,})\s+([A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*)/;
+
+      const combinedMatch = line.match(combinedPattern);
+
+      if (combinedMatch && !cardInfo.lastName) {
+
+        const potentialLastName = combinedMatch[1].trim();
+
+        const potentialFirstName = combinedMatch[2].trim();
+
+        // Vérifier que le premier groupe est bien en majuscules et le second commence par majuscule
+
+        if (potentialLastName === potentialLastName.toUpperCase() && 
+
+            potentialFirstName[0] === potentialFirstName[0].toUpperCase() &&
+
+            potentialFirstName.length > 2) {
+
+          cardInfo.lastName = potentialLastName;
+
+          cardInfo.firstName = potentialFirstName;
+
+          console.log('Nom trouvé (pattern 3):', cardInfo.lastName, cardInfo.firstName);
+
+          break;
 
         }
 
