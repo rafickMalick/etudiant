@@ -20,10 +20,6 @@ const VotingPlatform = () => {
   // États pour le formulaire
   const [formLastName, setFormLastName] = useState('');
   const [formFirstName, setFormFirstName] = useState('');
-  const [formAt, setFormAt] = useState('');
-  const [formValidityDate, setFormValidityDate] = useState('');
-  const [formStudentId, setFormStudentId] = useState('');
-  const [formCountry, setFormCountry] = useState('');
 
   const [timeRemaining, setTimeRemaining] = useState(60);
 
@@ -970,14 +966,8 @@ const VotingPlatform = () => {
         return;
       }
 
-      if (!formAt) {
-        setVerificationError('Veuillez remplir le lieu (At).');
-        setVerifying(false);
-        return;
-      }
-
-      if (!formValidityDate) {
-        setVerificationError('Veuillez remplir la date de validité.');
+      if (!capturedImage) {
+        setVerificationError('Veuillez ajouter une photo de votre carte étudiante.');
         setVerifying(false);
         return;
       }
@@ -987,63 +977,15 @@ const VotingPlatform = () => {
         isStudentCard: true,
         lastName: formLastName.trim(),
         firstName: formFirstName.trim(),
-        at: formAt.trim(),
-        validityDate: formValidityDate.trim(),
-        validUntil: formValidityDate.trim(),
-        studentId: formStudentId.trim(),
-        country: formCountry.trim(),
-        isValid: true,
-        isTanguieta: false
+        isValid: true
       };
-
-      // Vérifier si c'est Tanguiéta
-      const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguietta'];
-      const atLower = cardInfo.at.toLowerCase().trim();
-      cardInfo.isTanguieta = tanguietaVariations.some(variation => 
-        atLower.includes(variation) || 
-        atLower === variation ||
-        atLower.startsWith(variation) ||
-        atLower.endsWith(variation)
-      );
-
-      // Vérifier la date de validité si format DD/MM/YYYY
-      if (cardInfo.validUntil && cardInfo.validUntil.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-        const [day, month, year] = cardInfo.validUntil.split('/').map(Number);
-        const expiryDate = new Date(year, month - 1, day);
-        const currentDate = new Date();
-        cardInfo.isValid = expiryDate > currentDate;
-      }
 
       console.log('Informations du formulaire:', cardInfo);
 
       
 
-
-      
-
-      if (!cardInfo.isValid) {
-
-        setVerificationError('Carte expirée. Date de validité: ' + (cardInfo.validityDate || cardInfo.validUntil));
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      
-
-      if (!cardInfo.isTanguieta) {
-        setVerificationError(`Cette élection est réservée aux étudiants de Tanguiéta.\n\nLieu indiqué: ${cardInfo.at || 'Non spécifié'}`);
-        setVerifying(false);
-        return;
-      }
-
-      
-
       // Créer un identifiant unique pour l'étudiant
-
-      const studentIdentifier = (cardInfo.lastName + '_' + cardInfo.firstName + '_' + (cardInfo.studentId || '')).toLowerCase().replace(/\s+/g, '_');
+      const studentIdentifier = (cardInfo.lastName + '_' + cardInfo.firstName).toLowerCase().replace(/\s+/g, '_');
 
       
 
@@ -1086,15 +1028,10 @@ const VotingPlatform = () => {
         : (cardInfo.lastName || cardInfo.firstName || '');
 
       setCardData({ 
-
         ...cardInfo, 
-
         identifier: studentIdentifier,
-
-        name: fullName, // Nom complet pour l'affichage (compatibilité avec ancien code)
-
-        city: cardInfo.at || cardInfo.city || '' // Pour compatibilité avec l'affichage existant
-
+        name: fullName, // Nom complet pour l'affichage
+        photo: capturedImage // Stocker la photo pour validation admin
       });
 
       setVerifying(false);
@@ -1327,6 +1264,31 @@ const VotingPlatform = () => {
 
   };
 
+  const clearAllVotes = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir effacer tous les votes ? Cette action est irréversible.')) {
+      return;
+    }
+
+    try {
+      // Réinitialiser tous les votes à 0
+      const initialVotes = {};
+      candidates.forEach(c => initialVotes[c.id] = 0);
+      
+      setVotes(initialVotes);
+      setTempVotes(initialVotes);
+      setVotedStudents(new Set());
+
+      // Sauvegarder dans le localStorage
+      await window.storage.set('election_votes', JSON.stringify(initialVotes), true);
+      await window.storage.set('voted_students', JSON.stringify([]), true);
+
+      alert('Tous les votes ont été effacés. Les élections peuvent reprendre.');
+    } catch (error) {
+      console.error('Erreur lors de l\'effacement des votes:', error);
+      alert('Erreur lors de l\'effacement des votes.');
+    }
+  };
+
   const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
 
   const results = candidates.map(c => ({
@@ -1495,69 +1457,10 @@ const VotingPlatform = () => {
                 />
               </div>
 
-              {/* Lieu (At) */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Lieu de naissance (At) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formAt}
-                  onChange={(e) => setFormAt(e.target.value)}
-                  placeholder="Ex: Tanguiéta"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-                  required
-                />
-              </div>
-
-              {/* Date de validité */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Date de validité <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formValidityDate}
-                  onChange={(e) => setFormValidityDate(e.target.value)}
-                  placeholder="Ex: 31/12/2025 ou 01/01 2024 au 31/12/2025"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Format: DD/MM/YYYY ou DD/MM YYYY au DD/MM/YYYY</p>
-              </div>
-
-              {/* Matricule (optionnel) */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Matricule (optionnel)
-                </label>
-                <input
-                  type="text"
-                  value={formStudentId}
-                  onChange={(e) => setFormStudentId(e.target.value)}
-                  placeholder="Ex: 12345"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-                />
-              </div>
-
-              {/* Pays (optionnel) */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Pays (optionnel)
-                </label>
-                <input
-                  type="text"
-                  value={formCountry}
-                  onChange={(e) => setFormCountry(e.target.value)}
-                  placeholder="Ex: Bénin"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-                />
-              </div>
-
               {/* Photo de la carte étudiante */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Photo de la carte étudiante (optionnel)
+                  Photo de la carte étudiante <span className="text-red-500">*</span>
                 </label>
                 <label className="block w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition text-center cursor-pointer border-2 border-dashed border-gray-300">
                   📸 {capturedImage ? 'Photo sélectionnée' : 'Choisir une photo'}
@@ -1604,10 +1507,6 @@ const VotingPlatform = () => {
                   onClick={() => {
                     setFormLastName('');
                     setFormFirstName('');
-                    setFormAt('');
-                    setFormValidityDate('');
-                    setFormStudentId('');
-                    setFormCountry('');
                     setCapturedImage(null);
                     setVerificationError('');
                   }}
@@ -2079,7 +1978,23 @@ const VotingPlatform = () => {
 
               )}
 
-              
+              {/* Bouton pour effacer tous les votes */}
+              {(electionStatus === 'active' || electionStatus === 'results_available') && (
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
+                  <h3 className="text-lg font-bold text-red-800 mb-2">Zone de danger</h3>
+                  <p className="text-sm text-red-700 mb-4">
+                    Effacer tous les votes permettra de reprendre les élections depuis le début.
+                    Tous les votes et la liste des votants seront supprimés.
+                  </p>
+                  <button
+                    onClick={clearAllVotes}
+                    className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 transition flex items-center justify-center gap-2"
+                  >
+                    <XCircle size={20} />
+                    Effacer tous les votes
+                  </button>
+                </div>
+              )}
 
               <button
 
