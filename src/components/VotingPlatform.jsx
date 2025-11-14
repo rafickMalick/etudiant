@@ -662,14 +662,25 @@ const VotingPlatform = () => {
 
     // Extraire le nom et prénom
     // Format typique: "MALICK Abdul-rafick" ou "MALICK" sur une ligne et "Abdul-rafick" sur la suivante
-    // Le nom est situé en bas de la carte étudiante
+    // Le nom peut être en haut ou en bas de la carte étudiante - chercher partout
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-    // Chercher dans les dernières lignes (le nom est en bas de la carte)
-    // Commencer par la fin et remonter
-    const startIndex = Math.max(0, lines.length - 20); // Chercher dans les 20 dernières lignes
+    // Chercher d'abord dans les dernières lignes (bas de la carte), puis dans les premières si pas trouvé
+    const searchRanges = [
+      { start: Math.max(0, lines.length - 25), end: lines.length - 1, direction: -1 }, // Bas de la carte
+      { start: 0, end: Math.min(15, lines.length - 1), direction: 1 } // Haut de la carte
+    ];
     
-    for (let i = lines.length - 1; i >= startIndex; i--) {
+    let nameFound = false;
+    
+    for (const range of searchRanges) {
+      if (nameFound) break;
+      
+      const step = range.direction;
+      const start = step > 0 ? range.start : range.end;
+      const end = step > 0 ? range.end : range.start;
+      
+      for (let i = start; (step > 0 ? i <= end : i >= end); i += step) {
 
       const line = lines[i];
 
@@ -687,6 +698,8 @@ const VotingPlatform = () => {
         cardInfo.firstName = match1[2].trim();
 
         console.log('Nom trouvé (pattern 1):', cardInfo.lastName, cardInfo.firstName);
+
+        nameFound = true;
 
         break;
 
@@ -717,6 +730,8 @@ const VotingPlatform = () => {
 
             console.log('Nom trouvé (pattern 2 - prénom avant nom):', cardInfo.lastName, cardInfo.firstName);
 
+            nameFound = true;
+
             break;
 
           }
@@ -739,6 +754,8 @@ const VotingPlatform = () => {
             cardInfo.firstName = nextLine.trim();
 
             console.log('Nom trouvé (pattern 2 - nom avant prénom):', cardInfo.lastName, cardInfo.firstName);
+
+            nameFound = true;
 
             break;
 
@@ -775,15 +792,18 @@ const VotingPlatform = () => {
 
           console.log('Nom trouvé (pattern 3):', cardInfo.lastName, cardInfo.firstName);
 
+          nameFound = true;
+
           break;
 
         }
 
       }
 
+      }
     }
 
-    // Extraire le lieu (At)
+    // Extraire le lieu (At) - aussi chercher "city" ou "ville"
     // Chercher "At:" ou "A At:" suivi du lieu
     const atPattern = /(?:A\s+)?At:\s*([A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ\s-]+)/i;
 
@@ -791,15 +811,32 @@ const VotingPlatform = () => {
 
     if (atMatch) {
 
-      cardInfo.at = atMatch[1].trim();
+      cardInfo.at = atMatch[1].trim().split('\n')[0].trim().split(/[,\s]+/)[0]; // Prendre seulement le premier mot
 
       // Vérifier si c'est Tanguiéta
 
-      const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguieta', 'tanguietta'];
+      const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguietta'];
 
       const atLower = cardInfo.at.toLowerCase();
 
-      cardInfo.isTanguieta = tanguietaVariations.some(variation => atLower.includes(variation));
+      cardInfo.isTanguieta = tanguietaVariations.some(variation => atLower.includes(variation) || atLower === variation);
+
+    }
+
+    // Si pas trouvé avec "At:", chercher dans tout le texte des variations de Tanguiéta
+    if (!cardInfo.at || !cardInfo.isTanguieta) {
+
+      const tanguietaPattern = /\b(tanguieta|tanguiéta|tanguietta)\b/i;
+
+      const tanguietaMatch = text.match(tanguietaPattern);
+
+      if (tanguietaMatch) {
+
+        cardInfo.at = tanguietaMatch[1];
+
+        cardInfo.isTanguieta = true;
+
+      }
 
     }
 
@@ -1019,6 +1056,10 @@ const VotingPlatform = () => {
       
 
       // Stocker toutes les informations extraites
+      // Créer un nom complet pour compatibilité avec l'ancien code
+      const fullName = cardInfo.firstName && cardInfo.lastName 
+        ? `${cardInfo.firstName} ${cardInfo.lastName}`
+        : (cardInfo.lastName || cardInfo.firstName || '');
 
       setCardData({ 
 
@@ -1026,9 +1067,9 @@ const VotingPlatform = () => {
 
         identifier: studentIdentifier,
 
-        name: `${cardInfo.firstName} ${cardInfo.lastName}`, // Nom complet pour l'affichage
+        name: fullName, // Nom complet pour l'affichage (compatibilité avec ancien code)
 
-        city: cardInfo.at // Pour compatibilité avec l'affichage existant
+        city: cardInfo.at || cardInfo.city || '' // Pour compatibilité avec l'affichage existant
 
       });
 
