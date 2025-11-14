@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 
 import { Camera, CheckCircle, XCircle, Users, Clock, Award, AlertCircle, Shield, ShieldCheck, Edit2, Play, Calendar } from 'lucide-react';
 
-import { createWorker } from 'tesseract.js';
 
 const VotingPlatform = () => {
 
@@ -18,7 +17,13 @@ const VotingPlatform = () => {
 
   const [verificationError, setVerificationError] = useState('');
 
-  const [extractedText, setExtractedText] = useState(''); // Pour afficher le texte extrait
+  // États pour le formulaire
+  const [formLastName, setFormLastName] = useState('');
+  const [formFirstName, setFormFirstName] = useState('');
+  const [formAt, setFormAt] = useState('');
+  const [formValidityDate, setFormValidityDate] = useState('');
+  const [formStudentId, setFormStudentId] = useState('');
+  const [formCountry, setFormCountry] = useState('');
 
   const [timeRemaining, setTimeRemaining] = useState(60);
 
@@ -950,117 +955,69 @@ const VotingPlatform = () => {
 
   };
 
-  const verifyCard = async () => {
+  const verifyCard = () => {
 
     setVerifying(true);
 
     setVerificationError('');
 
-    
-
     try {
 
-      if (!capturedImage) {
-
-        setVerificationError('Aucune image capturée.');
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      // Utiliser Tesseract.js (gratuit et open source) pour extraire le texte de l'image
-      // Aucune clé API nécessaire - fonctionne entièrement côté client
-      const worker = await createWorker('fra+eng', 1, {
-        logger: m => {
-          // Afficher la progression dans la console pour le débogage
-          if (m.status === 'recognizing text') {
-            console.log(`Progression OCR: ${Math.round(m.progress * 100)}%`);
-          }
-        }
-      });
-
-      // Utiliser une meilleure configuration pour améliorer la précision
-      await worker.setParameters({
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ0123456789/-:., ',
-        preserve_interword_spaces: '1'
-      });
-
-      const { data: { text } } = await worker.recognize(capturedImage, {
-        rectangle: undefined // Analyser toute l'image
-      });
-
-      await worker.terminate();
-
-      if (!text || text.trim().length === 0) {
-        setVerificationError('Aucun texte détecté dans l\'image. Veuillez réessayer avec une photo plus claire.');
+      // Valider les champs requis
+      if (!formLastName || !formFirstName) {
+        setVerificationError('Veuillez remplir le nom et le prénom.');
         setVerifying(false);
         return;
       }
 
-      console.log('=== TEXTE EXTRAIT PAR TESSERACT.JS ===');
-      console.log('Texte complet:', text);
-      console.log('Nombre de lignes:', text.split('\n').length);
-      console.log('Lignes détaillées:');
-      text.split('\n').forEach((line, index) => {
-        if (line.trim().length > 0) {
-          console.log(`  Ligne ${index + 1}: "${line.trim()}"`);
-        }
-      });
-      console.log('========================================');
+      if (!formAt) {
+        setVerificationError('Veuillez remplir le lieu (At).');
+        setVerifying(false);
+        return;
+      }
 
-      // Stocker le texte extrait pour l'affichage
-      setExtractedText(text);
+      if (!formValidityDate) {
+        setVerificationError('Veuillez remplir la date de validité.');
+        setVerifying(false);
+        return;
+      }
 
-      // Parser le texte pour extraire les informations
+      // Créer l'objet cardInfo avec les données du formulaire
+      const cardInfo = {
+        isStudentCard: true,
+        lastName: formLastName.trim(),
+        firstName: formFirstName.trim(),
+        at: formAt.trim(),
+        validityDate: formValidityDate.trim(),
+        validUntil: formValidityDate.trim(),
+        studentId: formStudentId.trim(),
+        country: formCountry.trim(),
+        isValid: true,
+        isTanguieta: false
+      };
 
-      const cardInfo = parseCardText(text);
+      // Vérifier si c'est Tanguiéta
+      const tanguietaVariations = ['tanguieta', 'tanguiéta', 'tanguietta'];
+      const atLower = cardInfo.at.toLowerCase().trim();
+      cardInfo.isTanguieta = tanguietaVariations.some(variation => 
+        atLower.includes(variation) || 
+        atLower === variation ||
+        atLower.startsWith(variation) ||
+        atLower.endsWith(variation)
+      );
 
-      console.log('Informations extraites:', cardInfo);
+      // Vérifier la date de validité si format DD/MM/YYYY
+      if (cardInfo.validUntil && cardInfo.validUntil.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        const [day, month, year] = cardInfo.validUntil.split('/').map(Number);
+        const expiryDate = new Date(year, month - 1, day);
+        const currentDate = new Date();
+        cardInfo.isValid = expiryDate > currentDate;
+      }
+
+      console.log('Informations du formulaire:', cardInfo);
 
       
 
-      if (!cardInfo.isStudentCard) {
-
-        setVerificationError('Ce n\'est pas une carte étudiante valide.');
-
-        setVerifying(false);
-
-        return;
-
-      }
-
-      // Vérifier que les champs requis sont présents et afficher ce qui a été récupéré en cas d'erreur
-      const extractedInfo = {
-        nom: cardInfo.lastName || 'Non trouvé',
-        prénom: cardInfo.firstName || 'Non trouvé',
-        lieu: cardInfo.at || 'Non trouvé',
-        date: cardInfo.validUntil || cardInfo.validityDate || 'Non trouvée',
-        pays: cardInfo.country || 'Non trouvé',
-        matricule: cardInfo.studentId || 'Non trouvé'
-      };
-
-      if (!cardInfo.lastName || !cardInfo.firstName) {
-        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
-        setVerificationError(`Impossible d'extraire le nom et/ou le prénom de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
-        setVerifying(false);
-        return;
-      }
-
-      if (!cardInfo.at) {
-        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
-        setVerificationError(`Impossible d'extraire le lieu (At) de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
-        setVerifying(false);
-        return;
-      }
-
-      if (!cardInfo.validUntil && !cardInfo.validityDate) {
-        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
-        setVerificationError(`Impossible d'extraire la date de validité de la carte.\n\n${infoText}\n\nVeuillez réessayer avec une photo plus claire.`);
-        setVerifying(false);
-        return;
-      }
 
       
 
@@ -1077,8 +1034,7 @@ const VotingPlatform = () => {
       
 
       if (!cardInfo.isTanguieta) {
-        const infoText = `Informations récupérées:\n- Nom: ${extractedInfo.nom}\n- Prénom: ${extractedInfo.prénom}\n- Lieu: ${extractedInfo.lieu}\n- Date: ${extractedInfo.date}\n- Pays: ${extractedInfo.pays}`;
-        setVerificationError(`Cette élection est réservée aux étudiants de Tanguiéta.\n\nLieu détecté: ${cardInfo.at || 'Non spécifié'}\n\n${infoText}`);
+        setVerificationError(`Cette élection est réservée aux étudiants de Tanguiéta.\n\nLieu indiqué: ${cardInfo.at || 'Non spécifié'}`);
         setVerifying(false);
         return;
       }
@@ -1153,15 +1109,7 @@ const VotingPlatform = () => {
 
       console.error('Erreur de vérification:', error);
 
-      if (error.message?.includes('worker') || error.message?.includes('tesseract')) {
-
-        setVerificationError('Erreur lors de l\'extraction du texte. Veuillez réessayer avec une photo plus claire et bien éclairée.');
-
-      } else {
-
-        setVerificationError('Erreur lors de la vérification: ' + (error.message || 'Erreur inconnue'));
-
-      }
+      setVerificationError('Erreur lors de la vérification: ' + (error.message || 'Erreur inconnue'));
 
       setVerifying(false);
 
@@ -1496,7 +1444,7 @@ const VotingPlatform = () => {
 
               <h1 className="text-3xl font-bold text-gray-800 mb-2">Élections Étudiantes 2025</h1>
 
-              <p className="text-gray-600">Scannez ou importez votre carte étudiante</p>
+              <p className="text-gray-600">Remplissez le formulaire avec vos informations</p>
 
               <p className="text-sm text-blue-600 font-semibold mt-2">🏛️ Réservé aux étudiants de Tanguiéta</p>
 
@@ -1516,247 +1464,175 @@ const VotingPlatform = () => {
 
             </div>
 
-            {!capturedImage ? (
-
-              <div className="space-y-4">
-
-                {!stream ? (
-
-                  <>
-
-                    {!isMobile ? (
-
-                      <button
-
-                        onClick={startCamera}
-
-                        className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2"
-
-                      >
-
-                        <Camera size={24} />
-
-                        Activer la caméra
-
-                      </button>
-
-                    ) : (
-
-                      <label className="block w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 transition text-center cursor-pointer">
-
-                        📸 Importer une photo de la carte
-
-                        <input
-
-                          type="file"
-
-                          accept="image/*"
-
-                          capture="environment"
-
-                          onChange={handleFileUpload}
-
-                          className="hidden"
-
-                        />
-
-                      </label>
-
-                    )}
-
-                  </>
-
-                ) : (
-
-                  <div className="space-y-4">
-
-                    <div className="relative bg-black rounded-lg overflow-hidden" style={{ minHeight: '400px' }}>
-
-                      <video
-
-                        ref={videoRef}
-
-                        autoPlay
-
-                        playsInline
-
-                        muted
-
-                        className="w-full rounded-lg"
-
-                      />
-
-                    </div>
-
-                    <button
-
-                      onClick={capturePhoto}
-
-                      className="w-full bg-green-600 text-white py-4 rounded-lg font-semibold hover:bg-green-700 transition"
-
-                    >
-
-                      📸 Capturer la carte
-
-                    </button>
-
-                  </div>
-
-                )}
-
-                <canvas ref={canvasRef} className="hidden" />
-
+            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); verifyCard(); }}>
+              {/* Nom */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nom de famille <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formLastName}
+                  onChange={(e) => setFormLastName(e.target.value)}
+                  placeholder="Ex: MALICK"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  required
+                />
               </div>
 
-            ) : (
+              {/* Prénom */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Prénom <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formFirstName}
+                  onChange={(e) => setFormFirstName(e.target.value)}
+                  placeholder="Ex: Abdul-rafick"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  required
+                />
+              </div>
 
-              <div className="space-y-4">
+              {/* Lieu (At) */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Lieu de naissance (At) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formAt}
+                  onChange={(e) => setFormAt(e.target.value)}
+                  placeholder="Ex: Tanguiéta"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  required
+                />
+              </div>
 
-                <img src={capturedImage} alt="Carte captée" className="w-full rounded-lg shadow-lg" />
+              {/* Date de validité */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Date de validité <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formValidityDate}
+                  onChange={(e) => setFormValidityDate(e.target.value)}
+                  placeholder="Ex: 31/12/2025 ou 01/01 2024 au 31/12/2025"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Format: DD/MM/YYYY ou DD/MM YYYY au DD/MM/YYYY</p>
+              </div>
 
-                
+              {/* Matricule (optionnel) */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Matricule (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={formStudentId}
+                  onChange={(e) => setFormStudentId(e.target.value)}
+                  placeholder="Ex: 12345"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                />
+              </div>
 
-                {!verifying && !verificationError && (
+              {/* Pays (optionnel) */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Pays (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={formCountry}
+                  onChange={(e) => setFormCountry(e.target.value)}
+                  placeholder="Ex: Bénin"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
+                />
+              </div>
 
-                  <div className="flex gap-4">
-
+              {/* Photo de la carte étudiante */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Photo de la carte étudiante (optionnel)
+                </label>
+                <label className="block w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition text-center cursor-pointer border-2 border-dashed border-gray-300">
+                  📸 {capturedImage ? 'Photo sélectionnée' : 'Choisir une photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                {capturedImage && (
+                  <div className="mt-3">
+                    <img src={capturedImage} alt="Carte étudiante" className="w-full rounded-lg shadow-lg max-h-64 object-contain" />
                     <button
-
-                      onClick={() => {
-
-                        setCapturedImage(null);
-
-                        setVerificationError('');
-
-                        setExtractedText('');
-
-                        setStream(null);
-
-                      }}
-
-                      className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition"
-
+                      type="button"
+                      onClick={() => setCapturedImage(null)}
+                      className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
                     >
-
-                      Reprendre
-
+                      Supprimer la photo
                     </button>
-
-                    <button
-
-                      onClick={verifyCard}
-
-                      className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-
-                    >
-
-                      Vérifier
-
-                    </button>
-
                   </div>
-
                 )}
+              </div>
 
-                {verifying && (
-
-                  <div className="text-center py-8">
-
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-
-                    <p className="text-gray-600 font-semibold">Vérification de la carte en cours...</p>
-
-                    <p className="text-sm text-gray-500 mt-2">Extraction des données et validation</p>
-
-                  </div>
-
-                )}
-
-                {extractedText && !verifying && !verificationError && (
-
-                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mt-4">
-
-                    <p className="text-blue-800 font-bold text-sm mb-2">📝 Texte extrait par OCR :</p>
-
-                    <div className="bg-white rounded p-3 max-h-60 overflow-y-auto text-xs font-mono text-gray-700 whitespace-pre-wrap">
-
-                      {extractedText}
-
-                    </div>
-
-                    <p className="text-blue-600 text-xs mt-2">Vérifiez que toutes les informations sont présentes ci-dessus</p>
-
-                  </div>
-
-                )}
-
-                {extractedText && verificationError && (
-
-                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-4">
-
-                    <p className="text-blue-800 font-bold text-sm mb-2">📝 Texte extrait par OCR :</p>
-
-                    <div className="bg-white rounded p-3 max-h-60 overflow-y-auto text-xs font-mono text-gray-700 whitespace-pre-wrap">
-
-                      {extractedText}
-
-                    </div>
-
-                  </div>
-
-                )}
-
-                {verificationError && (
-
-                  <div className="bg-red-100 border-2 border-red-500 rounded-lg p-6">
-
-                    <div className="flex items-start gap-3">
-
-                      <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-1" />
-
-                      <div className="flex-1">
-
-                        <p className="text-red-700 font-bold text-lg mb-2">Erreur de vérification</p>
-
-                        <div className="text-red-600 mt-2 whitespace-pre-line text-sm space-y-1">
-                          {verificationError.split('\n').map((line, index) => (
-                            <p key={index} className={line.startsWith('-') ? 'ml-4' : line.startsWith('Informations') ? 'font-semibold mt-2' : ''}>
-                              {line}
-                            </p>
-                          ))}
-                        </div>
-
+              {/* Messages d'erreur */}
+              {verificationError && (
+                <div className="bg-red-100 border-2 border-red-500 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-1" />
+                    <div className="flex-1">
+                      <p className="text-red-700 font-bold mb-1">Erreur</p>
+                      <div className="text-red-600 text-sm whitespace-pre-line">
+                        {verificationError}
                       </div>
-
                     </div>
-
-                    <button
-
-                      onClick={() => {
-
-                        setCapturedImage(null);
-
-                        setVerificationError('');
-
-                        setExtractedText('');
-
-                      }}
-
-                      className="w-full mt-4 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition"
-
-                    >
-
-                      Réessayer
-
-                    </button>
-
                   </div>
+                </div>
+              )}
 
-                )}
-
+              {/* Bouton de soumission */}
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormLastName('');
+                    setFormFirstName('');
+                    setFormAt('');
+                    setFormValidityDate('');
+                    setFormStudentId('');
+                    setFormCountry('');
+                    setCapturedImage(null);
+                    setVerificationError('');
+                  }}
+                  className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition"
+                >
+                  Réinitialiser
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifying}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {verifying ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Vérification...
+                    </span>
+                  ) : (
+                    'Vérifier et continuer'
+                  )}
+                </button>
               </div>
+            </form>
 
-            )}
+
 
           </div>
 
