@@ -49,7 +49,7 @@ L'application sera accessible à l'adresse affichée (généralement `http://loc
 
 ## ⚠️ Configuration requise
 
-### Module de vérification photo (GRATUIT)
+### Module de vérification photo (GRATUIT - Tesseract.js)
 
 Le module de vérification photo utilise **Tesseract.js**, une bibliothèque OCR open source et **100% gratuite** qui fonctionne entièrement côté client. Aucune clé API n'est nécessaire !
 
@@ -64,6 +64,7 @@ Le module extrait automatiquement les informations suivantes de la carte étudia
 - ✅ **Fonctionne hors ligne** - Traitement côté client
 - ✅ **Respect de la vie privée** - Les images ne quittent jamais votre appareil
 - ✅ **Aucune configuration** - Fonctionne immédiatement après l'installation
+- ✅ **Pas de clé API** - Aucune configuration nécessaire
 
 **Conseils pour une meilleure extraction :**
 - Prenez une photo bien éclairée de la carte

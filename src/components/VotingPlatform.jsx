@@ -18,6 +18,8 @@ const VotingPlatform = () => {
 
   const [verificationError, setVerificationError] = useState('');
 
+  const [extractedText, setExtractedText] = useState(''); // Pour afficher le texte extrait
+
   const [timeRemaining, setTimeRemaining] = useState(60);
 
   const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -617,6 +619,7 @@ const VotingPlatform = () => {
 
   };
 
+
   // Fonction pour parser le texte extrait et trouver les informations
   const parseCardText = (text) => {
 
@@ -664,6 +667,10 @@ const VotingPlatform = () => {
     // Format typique: "MALICK Abdul-rafick" ou "MALICK" sur une ligne et "Abdul-rafick" sur la suivante
     // Le nom peut être en haut ou en bas de la carte étudiante - chercher partout
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    console.log('Lignes extraites:', lines.length);
+    console.log('Premières lignes:', lines.slice(0, 5));
+    console.log('Dernières lignes:', lines.slice(-5));
 
     // Chercher d'abord dans les dernières lignes (bas de la carte), puis dans les premières si pas trouvé
     const searchRanges = [
@@ -963,15 +970,48 @@ const VotingPlatform = () => {
 
       }
 
-      // Utiliser Tesseract.js pour extraire le texte de l'image
+      // Utiliser Tesseract.js (gratuit et open source) pour extraire le texte de l'image
+      // Aucune clé API nécessaire - fonctionne entièrement côté client
+      const worker = await createWorker('fra+eng', 1, {
+        logger: m => {
+          // Afficher la progression dans la console pour le débogage
+          if (m.status === 'recognizing text') {
+            console.log(`Progression OCR: ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      });
 
-      const worker = await createWorker('fra+eng'); // Français et Anglais
+      // Utiliser une meilleure configuration pour améliorer la précision
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ0123456789/-:., ',
+        preserve_interword_spaces: '1'
+      });
 
-      const { data: { text } } = await worker.recognize(capturedImage);
+      const { data: { text } } = await worker.recognize(capturedImage, {
+        rectangle: undefined // Analyser toute l'image
+      });
 
       await worker.terminate();
 
-      console.log('Texte extrait par OCR:', text);
+      if (!text || text.trim().length === 0) {
+        setVerificationError('Aucun texte détecté dans l\'image. Veuillez réessayer avec une photo plus claire.');
+        setVerifying(false);
+        return;
+      }
+
+      console.log('=== TEXTE EXTRAIT PAR TESSERACT.JS ===');
+      console.log('Texte complet:', text);
+      console.log('Nombre de lignes:', text.split('\n').length);
+      console.log('Lignes détaillées:');
+      text.split('\n').forEach((line, index) => {
+        if (line.trim().length > 0) {
+          console.log(`  Ligne ${index + 1}: "${line.trim()}"`);
+        }
+      });
+      console.log('========================================');
+
+      // Stocker le texte extrait pour l'affichage
+      setExtractedText(text);
 
       // Parser le texte pour extraire les informations
 
@@ -1588,6 +1628,8 @@ const VotingPlatform = () => {
 
                         setVerificationError('');
 
+                        setExtractedText('');
+
                         setStream(null);
 
                       }}
@@ -1630,6 +1672,40 @@ const VotingPlatform = () => {
 
                 )}
 
+                {extractedText && !verifying && !verificationError && (
+
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mt-4">
+
+                    <p className="text-blue-800 font-bold text-sm mb-2">📝 Texte extrait par OCR :</p>
+
+                    <div className="bg-white rounded p-3 max-h-60 overflow-y-auto text-xs font-mono text-gray-700 whitespace-pre-wrap">
+
+                      {extractedText}
+
+                    </div>
+
+                    <p className="text-blue-600 text-xs mt-2">Vérifiez que toutes les informations sont présentes ci-dessus</p>
+
+                  </div>
+
+                )}
+
+                {extractedText && verificationError && (
+
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-4">
+
+                    <p className="text-blue-800 font-bold text-sm mb-2">📝 Texte extrait par OCR :</p>
+
+                    <div className="bg-white rounded p-3 max-h-60 overflow-y-auto text-xs font-mono text-gray-700 whitespace-pre-wrap">
+
+                      {extractedText}
+
+                    </div>
+
+                  </div>
+
+                )}
+
                 {verificationError && (
 
                   <div className="bg-red-100 border-2 border-red-500 rounded-lg p-6">
@@ -1661,6 +1737,8 @@ const VotingPlatform = () => {
                         setCapturedImage(null);
 
                         setVerificationError('');
+
+                        setExtractedText('');
 
                       }}
 
