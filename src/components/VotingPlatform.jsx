@@ -662,10 +662,14 @@ const VotingPlatform = () => {
 
     // Extraire le nom et prénom
     // Format typique: "MALICK Abdul-rafick" ou "MALICK" sur une ligne et "Abdul-rafick" sur la suivante
+    // Le nom est situé en bas de la carte étudiante
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-    // Chercher dans les premières lignes (généralement où se trouve le nom en haut)
-    for (let i = 0; i < Math.min(15, lines.length); i++) {
+    // Chercher dans les dernières lignes (le nom est en bas de la carte)
+    // Commencer par la fin et remonter
+    const startIndex = Math.max(0, lines.length - 20); // Chercher dans les 20 dernières lignes
+    
+    for (let i = lines.length - 1; i >= startIndex; i--) {
 
       const line = lines[i];
 
@@ -694,22 +698,24 @@ const VotingPlatform = () => {
 
       if (allUpperCasePattern.test(line) && line.length >= 2 && line.length < 50 && !line.includes(':')) {
 
-        // Vérifier si la ligne suivante contient un prénom
-        if (i + 1 < lines.length) {
+        // Vérifier si la ligne précédente (plus haut dans le texte) contient un prénom
+        // Comme on parcourt depuis la fin, la ligne précédente (i-1) est plus bas dans la carte
+        if (i > 0) {
 
-          const nextLine = lines[i + 1].trim();
+          const prevLine = lines[i - 1].trim();
 
           // Pattern pour prénom: commence par majuscule, puis minuscules, peut contenir des tirets suivis de minuscules
           // Ex: "Abdul-rafick" ou "Jean-Pierre"
           const firstNamePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*(?:\s+[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ-]+)*$/;
 
-          if (firstNamePattern.test(nextLine) && nextLine.length >= 2 && nextLine.length < 50 && !nextLine.includes(':')) {
+          if (firstNamePattern.test(prevLine) && prevLine.length >= 2 && prevLine.length < 50 && !prevLine.includes(':')) {
+
+            // Si on trouve un prénom sur la ligne précédente, c'est probablement: prénom puis nom
+            cardInfo.firstName = prevLine.trim();
 
             cardInfo.lastName = line.trim();
 
-            cardInfo.firstName = nextLine.trim();
-
-            console.log('Nom trouvé (pattern 2):', cardInfo.lastName, cardInfo.firstName);
+            console.log('Nom trouvé (pattern 2 - prénom avant nom):', cardInfo.lastName, cardInfo.firstName);
 
             break;
 
@@ -717,20 +723,22 @@ const VotingPlatform = () => {
 
         }
 
-        // Aussi vérifier la ligne précédente au cas où l'ordre serait inversé
-        if (i > 0) {
+        // Aussi vérifier la ligne suivante (plus bas dans le texte, donc i+1)
+        // Comme on parcourt depuis la fin, la ligne suivante (i+1) est plus haut dans la carte
+        if (i + 1 < lines.length) {
 
-          const prevLine = lines[i - 1].trim();
+          const nextLine = lines[i + 1].trim();
 
           const firstNamePattern = /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+(?:-[a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]+)*(?:\s+[A-Z][a-zàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ-]+)*$/;
 
-          if (firstNamePattern.test(prevLine) && prevLine.length >= 2 && prevLine.length < 50 && !prevLine.includes(':')) {
+          if (firstNamePattern.test(nextLine) && nextLine.length >= 2 && nextLine.length < 50 && !nextLine.includes(':')) {
 
-            cardInfo.firstName = prevLine.trim();
-
+            // Si on trouve un prénom sur la ligne suivante, c'est probablement: nom puis prénom
             cardInfo.lastName = line.trim();
 
-            console.log('Nom trouvé (pattern 2 inversé):', cardInfo.lastName, cardInfo.firstName);
+            cardInfo.firstName = nextLine.trim();
+
+            console.log('Nom trouvé (pattern 2 - nom avant prénom):', cardInfo.lastName, cardInfo.firstName);
 
             break;
 
