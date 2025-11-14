@@ -1289,6 +1289,72 @@ const VotingPlatform = () => {
     }
   };
 
+  const stopElection = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir arrêter l\'élection et reprendre la configuration ? Tous les votes seront conservés mais l\'élection sera arrêtée.')) {
+      return;
+    }
+
+    try {
+      // Arrêter l'élection
+      setElectionStatus('not_started');
+      setElectionStartTime(null);
+      setTimeUntilResults(null);
+
+      // Arrêter le timer
+      if (electionTimerRef.current) {
+        clearInterval(electionTimerRef.current);
+        electionTimerRef.current = null;
+      }
+
+      // Sauvegarder le statut
+      await window.storage.set('election_status', 'not_started', true);
+      await window.storage.set('election_start_time', '', true);
+
+      alert('L\'élection a été arrêtée. Vous pouvez maintenant modifier la configuration.');
+    } catch (error) {
+      console.error('Erreur lors de l\'arrêt de l\'élection:', error);
+      alert('Erreur lors de l\'arrêt de l\'élection.');
+    }
+  };
+
+  const resetElection = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir réinitialiser complètement l\'élection ? Tous les votes seront effacés et l\'élection sera arrêtée.')) {
+      return;
+    }
+
+    try {
+      // Réinitialiser tous les votes à 0
+      const initialVotes = {};
+      candidates.forEach(c => initialVotes[c.id] = 0);
+      
+      setVotes(initialVotes);
+      setTempVotes(initialVotes);
+      setVotedStudents(new Set());
+
+      // Arrêter l'élection
+      setElectionStatus('not_started');
+      setElectionStartTime(null);
+      setTimeUntilResults(null);
+
+      // Arrêter le timer
+      if (electionTimerRef.current) {
+        clearInterval(electionTimerRef.current);
+        electionTimerRef.current = null;
+      }
+
+      // Sauvegarder dans le localStorage
+      await window.storage.set('election_votes', JSON.stringify(initialVotes), true);
+      await window.storage.set('voted_students', JSON.stringify([]), true);
+      await window.storage.set('election_status', 'not_started', true);
+      await window.storage.set('election_start_time', '', true);
+
+      alert('L\'élection a été complètement réinitialisée. Vous pouvez maintenant modifier la configuration.');
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation:', error);
+      alert('Erreur lors de la réinitialisation.');
+    }
+  };
+
   const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
 
   const results = candidates.map(c => ({
@@ -1754,15 +1820,10 @@ const VotingPlatform = () => {
 
               
 
-              {electionStatus === 'not_started' && (
-
+              {/* Configuration de l'élection - accessible à tout moment */}
+              {!showElectionConfig ? (
                 <>
-
-                  {!showElectionConfig ? (
-
-                    <>
-
-                      {candidates.length === 0 ? (
+                  {candidates.length === 0 ? (
 
                         <button
 
@@ -1802,7 +1863,14 @@ const VotingPlatform = () => {
 
                             <button
 
-                              onClick={() => setShowElectionConfig(true)}
+                              onClick={() => {
+                                setShowElectionConfig(true);
+                                // Charger la configuration actuelle dans les champs
+                                if (candidates.length > 0) {
+                                  setPartyNames(candidates.map(c => c.name));
+                                  setNumberOfParties(candidates.length);
+                                }
+                              }}
 
                               className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
 
@@ -1954,47 +2022,72 @@ const VotingPlatform = () => {
 
                   )}
 
-                </>
-
-              )}
-
-              
-
-              {electionStatus === 'results_available' && (
-
-                <button
-
-                  onClick={() => setStage('results')}
-
-                  className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2"
-
-                >
-
-                  <Award size={24} />
-
-                  Voir les résultats
-
-                </button>
-
-              )}
-
-              {/* Bouton pour effacer tous les votes */}
+              {/* Actions pour les élections actives ou terminées */}
               {(electionStatus === 'active' || electionStatus === 'results_available') && (
-                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
-                  <h3 className="text-lg font-bold text-red-800 mb-2">Zone de danger</h3>
-                  <p className="text-sm text-red-700 mb-4">
-                    Effacer tous les votes permettra de reprendre les élections depuis le début.
-                    Tous les votes et la liste des votants seront supprimés.
-                  </p>
-                  <button
-                    onClick={clearAllVotes}
-                    className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 transition flex items-center justify-center gap-2"
-                  >
-                    <XCircle size={20} />
-                    Effacer tous les votes
-                  </button>
+                <div className="space-y-4">
+                  {electionStatus === 'results_available' && (
+                    <button
+                      onClick={() => setStage('results')}
+                      className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                    >
+                      <Award size={24} />
+                      Voir les résultats
+                    </button>
+                  )}
+
+                  <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                    <h3 className="text-lg font-bold text-yellow-800 mb-2">Gestion de l'élection</h3>
+                    <p className="text-sm text-yellow-700 mb-4">
+                      Vous pouvez arrêter l'élection pour modifier la configuration, ou réinitialiser complètement.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={stopElection}
+                        className="flex-1 bg-yellow-600 text-white py-3 rounded-lg font-semibold hover:bg-yellow-700 transition"
+                      >
+                        Arrêter l'élection
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowElectionConfig(true);
+                          // Charger la configuration actuelle dans les champs
+                          if (candidates.length > 0) {
+                            setPartyNames(candidates.map(c => c.name));
+                            setNumberOfParties(candidates.length);
+                          }
+                        }}
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+                      >
+                        Modifier la config
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
+                    <h3 className="text-lg font-bold text-red-800 mb-2">Zone de danger</h3>
+                    <p className="text-sm text-red-700 mb-4">
+                      Réinitialiser complètement l'élection effacera tous les votes et arrêtera l'élection.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={clearAllVotes}
+                        className="flex-1 bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 transition flex items-center justify-center gap-2"
+                      >
+                        <XCircle size={20} />
+                        Effacer les votes
+                      </button>
+                      <button
+                        onClick={resetElection}
+                        className="flex-1 bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 transition flex items-center justify-center gap-2"
+                      >
+                        <XCircle size={20} />
+                        Réinitialiser tout
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
+
 
               <button
 
